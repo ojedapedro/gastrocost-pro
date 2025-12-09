@@ -9,7 +9,9 @@ import {
   Plus, 
   Search,
   FileText,
-  Trash2
+  Trash2,
+  X,
+  Eye
 } from 'lucide-react';
 import { 
   Ingredient, 
@@ -29,7 +31,8 @@ import {
   calculateCUE, 
   calculateDishPricing, 
   formatCurrency, 
-  calculatePreRecipeUnitCost 
+  calculatePreRecipeUnitCost,
+  getComponentCost
 } from './utils/calculations';
 import IngredientModal from './components/IngredientModal';
 import CostCard from './components/CostCard';
@@ -37,7 +40,7 @@ import CostCard from './components/CostCard';
 // ----- SUB-COMPONENTS (Simplified for Single App file flow) -----
 
 const Header = ({ title }: { title: string }) => (
-  <header className="bg-white border-b border-slate-200 px-8 py-5 flex justify-between items-center sticky top-0 z-10">
+  <header className="bg-white border-b border-slate-200 px-8 py-5 flex justify-between items-center sticky top-0 z-10 no-print">
     <h1 className="text-2xl font-bold text-slate-800 tracking-tight">{title}</h1>
     <div className="flex items-center gap-4">
       <div className="bg-brand-50 text-brand-700 px-3 py-1 rounded-full text-xs font-semibold">v1.0.0</div>
@@ -58,6 +61,180 @@ const SidebarItem = ({ icon: Icon, label, active, onClick }: any) => (
     <span className="font-medium text-sm">{label}</span>
   </button>
 );
+
+interface DishDetailModalProps {
+  dish: Dish;
+  ingredients: Ingredient[];
+  preRecipes: PreRecipe[];
+  settings: GlobalSettings;
+  onClose: () => void;
+}
+
+const DishDetailModal: React.FC<DishDetailModalProps> = ({ dish, ingredients, preRecipes, settings, onClose }) => {
+  const pricing = calculateDishPricing(dish, ingredients, preRecipes, settings);
+  
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 print:p-0 print:bg-white print:fixed print:inset-0 print:z-[100]">
+      <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-2xl flex flex-col print:shadow-none print:w-full print:max-w-none print:max-h-none print:rounded-none">
+        {/* Header */}
+        <div className="p-6 border-b border-slate-100 flex justify-between items-start bg-slate-50 rounded-t-2xl print:bg-white print:border-b-2 print:border-black">
+           <div>
+             <h2 className="text-2xl font-bold text-slate-900">{dish.name}</h2>
+             <span className="text-slate-500 text-sm print:text-black">{dish.category} &bull; {dish.preparationTimeMinutes} min prep</span>
+           </div>
+           <button onClick={onClose} className="p-2 hover:bg-slate-200 rounded-full transition-colors print:hidden">
+             <X size={24} className="text-slate-500" />
+           </button>
+        </div>
+
+        <div className="p-8 space-y-8">
+           {/* Ingredients Table */}
+           <div>
+              <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                <UtensilsCrossed size={20} className="text-brand-500 print:text-black"/> Desglose de Receta
+              </h3>
+              <div className="border border-slate-200 rounded-xl overflow-hidden print:border-black">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50 text-slate-500 font-medium border-b border-slate-200 print:bg-slate-100 print:text-black print:border-black">
+                    <tr>
+                      <th className="px-4 py-3 text-left">Componente</th>
+                      <th className="px-4 py-3 text-center">Tipo</th>
+                      <th className="px-4 py-3 text-right">Cantidad</th>
+                      <th className="px-4 py-3 text-right">Costo Unitario</th>
+                      <th className="px-4 py-3 text-right">Costo Total</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 print:divide-slate-300">
+                    {dish.components.map((comp, idx) => {
+                      const isIng = comp.type === 'ingredient';
+                      const item = isIng 
+                        ? ingredients.find(i => i.id === comp.id)
+                        : preRecipes.find(p => p.id === comp.id);
+                      
+                      const unitCost = isIng 
+                        ? calculateCUE(item as Ingredient)
+                        : calculatePreRecipeUnitCost(item as PreRecipe, ingredients, preRecipes);
+                        
+                      const totalCost = getComponentCost(comp, ingredients, preRecipes);
+
+                      return (
+                        <tr key={idx} className="hover:bg-slate-50/50">
+                          <td className="px-4 py-3 font-medium text-slate-700 print:text-black">{item?.name || 'Desconocido'}</td>
+                          <td className="px-4 py-3 text-center print:text-black">
+                            <span className={`text-[10px] uppercase font-bold px-2 py-1 rounded-full ${isIng ? 'bg-blue-100 text-blue-600' : 'bg-purple-100 text-purple-600'} print:border print:border-black print:bg-white print:text-black`}>
+                              {isIng ? 'Insumo' : 'Pre-Receta'}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-right text-slate-600 print:text-black">
+                             {comp.quantity} {isIng ? (item as Ingredient)?.standardUnit : (item as PreRecipe)?.unit}
+                          </td>
+                          <td className="px-4 py-3 text-right text-slate-500 print:text-black">
+                             {formatCurrency(unitCost, settings.currency)}
+                          </td>
+                          <td className="px-4 py-3 text-right font-semibold text-slate-800 print:text-black">
+                             {formatCurrency(totalCost, settings.currency)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    <tr className="bg-slate-50 font-bold text-slate-800 print:bg-white print:border-t-2 print:border-black">
+                      <td colSpan={4} className="px-4 py-3 text-right">Total Ingredientes (CNI)</td>
+                      <td className="px-4 py-3 text-right text-blue-600 print:text-black">{formatCurrency(pricing.cni, settings.currency)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+           </div>
+
+           {/* Cost Summary Cards */}
+           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 print:grid-cols-2">
+              <div className="space-y-4">
+                 <h3 className="text-lg font-bold text-slate-800 mb-4">Estructura de Costos</h3>
+                 
+                 <div className="flex justify-between items-center p-3 border-b border-slate-100">
+                    <span className="text-slate-600 print:text-black">Materia Prima (CNI)</span>
+                    <span className="font-semibold print:text-black">{formatCurrency(pricing.cni, settings.currency)}</span>
+                 </div>
+                 <div className="flex justify-between items-center p-3 border-b border-slate-100">
+                    <div className="flex flex-col">
+                       <span className="text-slate-600 print:text-black">Mano de Obra (CMO)</span>
+                       <span className="text-xs text-slate-400 print:text-gray-600">{dish.preparationTimeMinutes} min @ {formatCurrency(settings.hourlyLaborRate, settings.currency)}/hr</span>
+                    </div>
+                    <span className="font-semibold print:text-black">{formatCurrency(pricing.cmo, settings.currency)}</span>
+                 </div>
+                 <div className="flex justify-between items-center p-3 border-b border-slate-100">
+                    <div className="flex flex-col">
+                       <span className="text-slate-600 print:text-black">Costos Indirectos (COI)</span>
+                       <span className="text-xs text-slate-400 print:text-gray-600">{settings.indirectCostPercentage}% del CNI</span>
+                    </div>
+                    <span className="font-semibold print:text-black">{formatCurrency(pricing.coi, settings.currency)}</span>
+                 </div>
+                 
+                 <div className="flex justify-between items-center p-4 bg-slate-100 rounded-xl mt-2 print:bg-white print:border print:border-black">
+                    <span className="font-bold text-slate-800 print:text-black">Costo Total Producción</span>
+                    <span className="font-bold text-xl text-slate-900 print:text-black">{formatCurrency(pricing.baseCost, settings.currency)}</span>
+                 </div>
+              </div>
+
+              <div className="space-y-4">
+                 <h3 className="text-lg font-bold text-slate-800 mb-4">Rentabilidad y Precio</h3>
+                 
+                 <div className="bg-slate-900 text-white p-6 rounded-2xl space-y-4 print:bg-white print:text-black print:border print:border-black">
+                    <div className="flex justify-between items-center opacity-80 print:opacity-100">
+                       <span>Costo Base</span>
+                       <span>{formatCurrency(pricing.baseCost, settings.currency)}</span>
+                    </div>
+                    <div className="flex justify-between items-center opacity-80 print:opacity-100">
+                       <span>Margen Ganancia ({settings.defaultMargin}%)</span>
+                       <span>{formatCurrency(pricing.finalPrice - pricing.baseCost - (pricing.finalPrice * settings.defaultTaxRate/100), settings.currency)}</span>
+                    </div>
+                     <div className="flex justify-between items-center opacity-80 print:opacity-100">
+                       <span>Impuesto ({settings.defaultTaxRate}%)</span>
+                       <span>{formatCurrency(pricing.finalPrice * (settings.defaultTaxRate/100), settings.currency)}</span>
+                    </div>
+                    <div className="h-px bg-white/20 my-2 print:bg-black"></div>
+                    <div className="flex justify-between items-end">
+                       <span className="font-bold text-lg">Precio Sugerido</span>
+                       <span className="font-bold text-3xl text-brand-400 print:text-black">{formatCurrency(pricing.finalPrice, settings.currency)}</span>
+                    </div>
+                 </div>
+                 
+                 <div className="grid grid-cols-2 gap-4 print:hidden">
+                   <div className="bg-green-50 p-4 rounded-xl border border-green-100">
+                      <span className="text-xs text-green-600 font-bold uppercase block mb-1">Rentabilidad Real</span>
+                      <span className="text-xl font-bold text-green-700">
+                        { pricing.finalPrice > 0 
+                          ? (( (pricing.finalPrice / (1 + settings.defaultTaxRate/100)) - pricing.baseCost ) / (pricing.finalPrice / (1 + settings.defaultTaxRate/100)) * 100).toFixed(1)
+                          : 0
+                        }%
+                      </span>
+                   </div>
+                   <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
+                      <span className="text-xs text-blue-600 font-bold uppercase block mb-1">Costo % (Food Cost)</span>
+                      <span className="text-xl font-bold text-blue-700">
+                        { pricing.finalPrice > 0
+                          ? ((pricing.cni / (pricing.finalPrice / (1 + settings.defaultTaxRate/100))) * 100).toFixed(1)
+                          : 0
+                        }%
+                      </span>
+                   </div>
+                 </div>
+              </div>
+           </div>
+        </div>
+        
+        <div className="p-6 border-t border-slate-100 bg-slate-50 rounded-b-2xl flex justify-end gap-3 print:hidden">
+           <button onClick={onClose} className="px-6 py-2 bg-white border border-slate-300 rounded-xl font-medium text-slate-700 hover:bg-slate-100">
+             Cerrar
+           </button>
+           <button onClick={() => window.print()} className="px-6 py-2 bg-brand-600 text-white rounded-xl font-medium hover:bg-brand-700 flex items-center gap-2">
+             <FileText size={18}/> Imprimir Reporte
+           </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ----- MAIN APP -----
 
@@ -393,6 +570,7 @@ const App = () => {
   // Wrapper for menu view to handle list vs editor
   const MenuManager = () => {
     const [viewMode, setViewMode] = useState<'list' | 'create'>('list');
+    const [selectedDish, setSelectedDish] = useState<Dish | null>(null);
 
     if (viewMode === 'create') {
        return (
@@ -418,6 +596,16 @@ const App = () => {
 
     return (
       <div className="space-y-6">
+         {selectedDish && (
+            <DishDetailModal 
+              dish={selectedDish} 
+              ingredients={ingredients} 
+              preRecipes={preRecipes} 
+              settings={settings}
+              onClose={() => setSelectedDish(null)}
+            />
+         )}
+
          <div className="flex justify-between items-center">
              <h2 className="text-lg font-bold text-slate-800">Menú Actual</h2>
              <button onClick={() => setViewMode('create')} className="bg-brand-600 text-white px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2">
@@ -455,29 +643,11 @@ const App = () => {
                       </div>
                    </div>
                    
-                   <button onClick={() => {
-                       // Generate simple print view (mock)
-                       const win = window.open('', '', 'width=800,height=600');
-                       win?.document.write(`
-                         <html><head><title>Escandallo - ${dish.name}</title>
-                         <style>body { font-family: sans-serif; padding: 40px; } table { width: 100%; border-collapse: collapse; margin-top: 20px; } th, td { border: 1px solid #ddd; padding: 8px; text-align: left; } th { background-color: #f2f2f2; }</style>
-                         </head><body>
-                         <h1>Ficha Técnica de Costo (Escandallo)</h1>
-                         <h2>${dish.name}</h2>
-                         <p><strong>Precio Venta:</strong> ${formatCurrency(cost.finalPrice, settings.currency)}</p>
-                         <h3>Desglose</h3>
-                         <table>
-                           <tr><th>Concepto</th><th>Valor</th></tr>
-                           <tr><td>Materia Prima (CNI)</td><td>${formatCurrency(cost.cni, settings.currency)}</td></tr>
-                           <tr><td>Mano de Obra (CMO)</td><td>${formatCurrency(cost.cmo, settings.currency)}</td></tr>
-                           <tr><td>Costos Indirectos (COI)</td><td>${formatCurrency(cost.coi, settings.currency)}</td></tr>
-                           <tr><td><strong>Costo Total</strong></td><td><strong>${formatCurrency(cost.baseCost, settings.currency)}</strong></td></tr>
-                         </table>
-                         </body></html>
-                       `);
-                       win?.print();
-                   }} className="w-full mt-4 py-2 border border-slate-200 rounded-lg text-sm text-slate-600 font-medium hover:bg-slate-50">
-                     Imprimir Escandallo
+                   <button 
+                     onClick={() => setSelectedDish(dish)}
+                     className="w-full mt-4 py-2 bg-brand-50 text-brand-700 border border-brand-100 rounded-lg text-sm font-medium hover:bg-brand-100 flex items-center justify-center gap-2"
+                   >
+                     <Eye size={16} /> Ver Detalles / Imprimir
                    </button>
                 </div>
               )
@@ -596,7 +766,7 @@ const App = () => {
   return (
     <div className="flex h-screen bg-slate-50 font-sans">
       {/* Sidebar */}
-      <aside className="w-64 bg-white border-r border-slate-200 hidden md:flex flex-col p-4">
+      <aside className="w-64 bg-white border-r border-slate-200 hidden md:flex flex-col p-4 print:hidden">
         <div className="flex items-center gap-3 px-4 mb-10 mt-2">
           <div className="w-8 h-8 bg-brand-600 rounded-lg flex items-center justify-center text-white font-bold">G</div>
           <span className="font-bold text-xl text-slate-800">GastroCost</span>
@@ -612,7 +782,7 @@ const App = () => {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col overflow-hidden">
+      <main className="flex-1 flex flex-col overflow-hidden print:overflow-visible print:block">
         <Header title={
           currentView === 'dashboard' ? 'Panel de Control' :
           currentView === 'ingredients' ? 'Gestión de Insumos' :
@@ -620,7 +790,7 @@ const App = () => {
           currentView === 'menu' ? 'Ingeniería de Menú' : 'Configuración'
         } />
         
-        <div className="flex-1 overflow-auto p-8">
+        <div className="flex-1 overflow-auto p-8 print:p-0 print:overflow-visible">
           {currentView === 'dashboard' && renderDashboard()}
           {currentView === 'ingredients' && renderIngredients()}
           {currentView === 'menu' && <MenuManager />}

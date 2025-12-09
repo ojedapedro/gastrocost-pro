@@ -17,7 +17,7 @@ export const calculateCUE = (ingredient: Ingredient): number => {
 /**
  * Helper to get cost of a component (Ingredient or PreRecipe)
  */
-const getComponentCost = (
+export const getComponentCost = (
   comp: RecipeComponent, 
   ingredients: Ingredient[], 
   preRecipes: PreRecipe[]
