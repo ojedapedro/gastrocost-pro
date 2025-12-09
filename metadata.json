@@ -1,0 +1,5 @@
+{
+  "name": "GastroCost Pro",
+  "description": "A professional menu costing and inventory application for restaurants, featuring weighted average cost tracking, sub-recipe management, and advanced pricing formulas.",
+  "requestFramePermissions": []
+}
